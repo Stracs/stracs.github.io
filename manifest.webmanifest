@@ -1,0 +1,13 @@
+{
+  "name": "Stracs",
+  "short_name": "Stracs",
+  "lang": "de",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1c1a2c",
+  "theme_color": "#26233a",
+  "icons": [
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "/icon-504.png", "sizes": "504x504", "type": "image/png", "purpose": "any" }
+  ]
+}
