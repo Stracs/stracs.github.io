@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#26233a" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Stracs" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <title>Stracs</title>
+    
+    
+  
+<meta name="robots" content="noindex, nofollow">
+<style>
+@font-face { font-family: 'P2P'; src: url('/assets/press-start-2p-latin-400-normal-_wFEWmAB.woff2') format('woff2'); }
+html, body { margin: 0; background: #1c1a2c; color: #f6eed6; font-family: ui-monospace, monospace; overflow-x: hidden; }
+#tuer { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 24px; box-sizing: border-box; }
+#tuer.wartet { visibility: hidden; }
+/* border-box: sonst ist der Kasten breiter als das Handy und die ganze Seite lässt sich verschieben */
+.box { box-sizing: border-box; width: min(340px, 100%); background: #f6eed6; color: #2a2320; border: 4px solid #0f0e18; box-shadow: inset -4px -4px 0 #e9dcb8, 6px 6px 0 #0f0e18; padding: 22px; text-align: center; }
+h1 { font-family: 'P2P', monospace; font-size: 18px; color: #e8742c; text-shadow: 2px 2px 0 #0f0e18; margin: 0 0 14px; }
+p { margin: 0 0 14px; font-size: 16px; }
+input { width: 100%; box-sizing: border-box; padding: 12px; font-size: 18px; border: 3px solid #0f0e18; background: #fffdf6; }
+button { width: 100%; margin-top: 12px; padding: 12px; font-size: 16px; font-family: 'P2P', monospace; background: #e8742c; color: #fff; border: 3px solid #0f0e18; box-shadow: inset -3px -3px 0 #c85a1c; cursor: pointer; }
+.msg { min-height: 22px; margin-top: 12px; font-size: 15px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<div id="tuer"><form class="box" id="form">
+  <h1>STRACS</h1>
+  <p>🔒 Der Türsteher fragt:<br>Wie lautet das Codewort?</p>
+  <input id="wort" type="password" autocomplete="current-password" autofocus>
+  <button type="submit">Eintreten</button>
+  <div class="msg" id="msg"></div>
+</form></div>
+<script>
+// Gerät kennt das Codewort schon: Tür gar nicht erst zeigen (kein kurzes Aufblitzen beim Öffnen)
+try { if (localStorage.getItem('stracs.tuer')) document.getElementById('tuer').className = 'wartet' } catch {}
+</script>
+<script type="module">
+const SALT = Uint8Array.from(atob('UaFHGRRVr9vA7eEWp9QMAg=='), (c) => c.charCodeAt(0))
+const STORE = 'stracs.tuer'
+const msg = document.getElementById('msg')
+const encrypted = fetch('/app.enc', { cache: 'no-store' }).then((r) => r.arrayBuffer())
+
+// Updates: iPhone-Home-Bildschirm-Apps bleiben im Hintergrund offen und laden nie neu.
+// Beim Zurückkehren in die App prüfen, ob es eine neue Version gibt – dann neu laden (Spielstand liegt sicher im Gerät).
+const VERSION = 'ff481e06748f0dc9a97b6aa9'
+async function checkUpdate() {
+  try {
+    const r = await fetch('/version.json', { cache: 'no-store' })
+    const { v } = await r.json()
+    if (v && v !== VERSION) location.reload()
+  } catch {}
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkUpdate() })
+window.addEventListener('pageshow', (e) => { if (e.persisted) checkUpdate() })
+window.addEventListener('focus', checkUpdate)
+
+// Offline: Tür und verschlüsselte App auf dem Gerät speichern, damit Stracs auch ohne Netz startet
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {})
+
+async function keyFrom(word) {
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(word), 'PBKDF2', false, ['deriveKey'])
+  return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: SALT, iterations: 310000, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, true, ['decrypt'])
+}
+
+async function open(key) {
+  const bytes = new Uint8Array(await encrypted)
+  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: bytes.subarray(0, 12) }, key, bytes.subarray(12))
+  const { js, css } = JSON.parse(new TextDecoder().decode(plain))
+  const style = document.createElement('style')
+  style.textContent = css
+  document.head.append(style)
+  // iPhone: Tastatur zu und Seite zurück nach oben – sonst bleibt das Lager nach dem Codewort verschoben
+  document.activeElement?.blur?.()
+  document.getElementById('tuer').remove()
+  window.scrollTo(0, 0)
+  await import(URL.createObjectURL(new Blob([js], { type: 'text/javascript' })))
+}
+
+// Dieses Gerät hat die Tür schon einmal geöffnet
+try {
+  const saved = localStorage.getItem(STORE)
+  if (saved) {
+    const raw = Uint8Array.from(atob(saved), (c) => c.charCodeAt(0))
+    await open(await crypto.subtle.importKey('raw', raw, 'AES-GCM', true, ['decrypt']))
+  }
+} catch {
+  try { localStorage.removeItem(STORE) } catch {}
+  document.getElementById('tuer')?.classList.remove('wartet')
+}
+
+document.getElementById('form')?.addEventListener('submit', async (e) => {
+  e.preventDefault()
+  msg.textContent = '🔓 Tür geht auf …'
+  try {
+    const key = await keyFrom(document.getElementById('wort').value)
+    await open(key)
+    try {
+      const raw = new Uint8Array(await crypto.subtle.exportKey('raw', key))
+      localStorage.setItem(STORE, btoa(String.fromCharCode(...raw)))
+    } catch {}
+  } catch {
+    msg.textContent = '❌ Falsches Codewort.'
+  }
+})
+</script>
+</body>
+</html>

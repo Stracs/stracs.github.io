@@ -1,0 +1,6 @@
+# Netlify: Tür, verschlüsselte App und Versionsdatei nie zwischenspeichern – sonst zeigt das iPhone alte Stände.
+/*
+  Cache-Control: no-cache, no-store, must-revalidate
+# Schriften und Bilder mit Hash im Namen ändern sich nie
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
